@@ -97,6 +97,11 @@ export function resetVectorSearchResultsUi(debounceTimer, backendTimer) {
 
 let showFullMetadata = typeof localStorage !== 'undefined' ? (localStorage.getItem(STORAGE_KEYS.SHOW_FULL_METADATA) === 'true') : false;
 
+// Field names ticked in the field list (shown on every card even when Full Meta is off)
+const selectedMetaFields = new Set((() => {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.META_FIELDS) || '[]'); } catch { return []; }
+})());
+
 export function reRenderWithCurrentResults() {
   if (lastRawResults && lastRawResults.length > 0) {
     const minScore = getMinScore();
@@ -158,39 +163,74 @@ function copyCardJson(btn, item) {
   }
 }
 
+const RESERVED_KEYS = new Set(['id', 'code', 'key', '@id', 'name', 'title', 'label', 'prefLabel', 'term', 'text', 'score', 'vector', 'description', 'comment', 'summary', 'definition', 'metadata']);
+// Fields the user does not read on a card: engine bookkeeping
+const HIDDEN_FIELDS = new Set(['inEditor', 'idx', 'layer', 'layerName']);
+
+// Flattened [key, value] pairs of an item's metadata, in the order the format gives them
+function collectMetaFields(r) {
+  const parts = [];
+  const push = (k, v) => {
+    if (HIDDEN_FIELDS.has(k) || v === undefined || v === null || v === '') return;
+    if (Array.isArray(v)) { if (v.length) parts.push([k, v.join(', ')]); return; }
+    if (typeof v === 'object') { for (const [sk, sv] of Object.entries(v)) push(`${k}.${sk}`, sv); return; }
+    parts.push([k, String(v)]);
+  };
+  for (const [k, v] of Object.entries(r.metadata || {})) push(k, v);
+  for (const [k, v] of Object.entries(r)) if (!RESERVED_KEYS.has(k)) push(k, v);
+  return parts;
+}
+
+// One checkbox per field name found in the current results (plus any ticked earlier), so each field can be shown on its own
+function renderMetaFieldChecks(results) {
+  const box = document.getElementById('metaFieldChecks');
+  if (!box) return;
+  const names = new Set(selectedMetaFields);
+  for (const r of results || []) for (const [k] of collectMetaFields(r)) names.add(k);
+  box.replaceChildren();
+  box.style.display = names.size ? 'flex' : 'none';
+  for (const name of [...names].sort()) {
+    const label = document.createElement('label');
+    label.style.cssText = 'display: flex; align-items: center; gap: 4px; font-size: var(--fs-11); color: var(--text-muted); cursor: pointer; user-select: none;';
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.checked = showFullMetadata || selectedMetaFields.has(name);
+    chk.disabled = showFullMetadata;
+    chk.style.cssText = 'accent-color: var(--accent-color, #818cf8); cursor: pointer;';
+    chk.addEventListener('change', () => {
+      if (chk.checked) selectedMetaFields.add(name); else selectedMetaFields.delete(name);
+      try { localStorage.setItem(STORAGE_KEYS.META_FIELDS, JSON.stringify([...selectedMetaFields])); } catch { /* storage unavailable */ }
+      reRenderWithCurrentResults();
+    });
+    const text = document.createElement('span');
+    text.textContent = name;
+    label.append(chk, text);
+    box.append(label);
+  }
+}
+
 function renderSingleCard(r, index, isPreliminary = false) {
   const title = resolveItemTitle(r);
   const code = resolveItemCode(r);
   const desc = resolveItemDescription(r);
   const score = typeof r.score === 'number' ? r.score : 0;
   const scorePct = Math.round(score * 100);
-  const metaObj = r.metadata || {};
   let metadataHtml = '';
 
-  const reservedKeys = new Set(['id', 'code', 'key', '@id', 'name', 'title', 'label', 'prefLabel', 'term', 'text', 'score', 'vector', 'description', 'comment', 'summary', 'definition', 'metadata']);
-  // Fields the user does not read on a card: engine bookkeeping
-  const hiddenFields = new Set(['inEditor', 'idx', 'layer', 'layerName']);
-  const visibleParts = [];
-  const pushField = (k, v) => {
-    if (hiddenFields.has(k) || v === undefined || v === null || v === '') return;
-    if (Array.isArray(v)) { if (v.length) visibleParts.push(`${k}: ${v.join(', ')}`); return; }
-    if (typeof v === 'object') { for (const [sk, sv] of Object.entries(v)) pushField(`${k}.${sk}`, sv); return; }
-    visibleParts.push(`${k}: ${v}`);
-  };
-  for (const [k, v] of Object.entries(metaObj)) pushField(k, v);
-  for (const [k, v] of Object.entries(r)) if (!reservedKeys.has(k)) pushField(k, v);
+  // "Full Meta" shows every field; otherwise only the fields ticked in the field list
+  const visibleParts = collectMetaFields(r).filter(([k]) => showFullMetadata || selectedMetaFields.has(k));
 
-  if (showFullMetadata && visibleParts.length > 0) {
-    metadataHtml = `<div class="metadata-grid" style="margin-top: 6px; padding-top: 6px; border-top: var(--border-width) solid var(--border-color); display: flex; flex-direction: column; gap: 3px;">`;
-    for (const part of visibleParts) {
-      metadataHtml += `<div class="item-subtitle" style="font-size: var(--fs-12); line-height: 1.35; color: var(--text-muted);">${escapeHtml(part)}</div>`;
+  if (visibleParts.length > 0) {
+    metadataHtml = `<div class="metadata-grid" style="margin-top: 6px; padding-top: 6px; border-top: var(--border-width) solid var(--border-color); display: grid; user-select: text; cursor: text; grid-template-columns: max-content 1fr; align-items: start; column-gap: 12px; row-gap: 3px;">`;
+    for (const [k, v] of visibleParts) {
+      metadataHtml += `<div class="item-subtitle" style="font-size: var(--fs-12); line-height: 1.35; color: var(--text-muted); font-weight: 600;">${escapeHtml(k)}</div>`
+        + `<div class="item-subtitle" style="font-size: var(--fs-12); line-height: 1.35; color: var(--text-muted); min-width: 0; overflow-wrap: anywhere;">${escapeHtml(v)}</div>`;
     }
     metadataHtml += `</div>`;
   }
 
-  const isCodePresent = Boolean(code);
   // An AI suggestion inserts its answer; the name and id on the card are only labels (they must never reach the document)
-  const insertPayload = typeof r.insertText === 'string' ? r.insertText : ((isCodePresent && !title.includes(code)) ? `${title} (${code})` : title);
+  const insertPayload = typeof r.insertText === 'string' ? r.insertText : (title || code || '');
   const btnInsertText = escapeHtml(t('btn_insert') || "Insert");
 
   return `
@@ -202,7 +242,7 @@ function renderSingleCard(r, index, isPreliminary = false) {
           ${code ? `<span class="item-code" style="flex-shrink: 0; font-family: monospace; font-size: var(--fs-11); padding: 1px 5px; border-radius: 3px; background: rgba(56, 189, 248, 0.15); color: var(--accent-color, #38bdf8); ">${escapeHtml(code)}</span>` : ''}
           ${isPreliminary
             ? `<span class="spinner" role="status" style="flex-shrink: 0;" title="${escapeHtml(t('vector_computing') || 'Computing...')}" aria-label="${escapeHtml(t('vector_computing') || 'Computing...')}"></span>`
-            : `<span class="similarity-score" style="flex-shrink: 0; font-size: var(--fs-12);  color: #10b981;">${scorePct}%</span>`}
+            : `<span class="similarity-score" style="flex-shrink: 0; font-size: var(--fs-16); font-weight: 600; color: #10b981;">${scorePct}%</span>`}
           ${title ? `<span class="item-title" style="font-size: var(--fs-14);  color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeHtml(title)}">${escapeHtml(title)}</span>` : ''}
         </div>
         <div style="display: flex; align-items: center; gap: 4px; flex-shrink: 0;">
@@ -225,6 +265,7 @@ function renderSingleCard(r, index, isPreliminary = false) {
 export function renderResults(results, isPreliminary = false) {
   currentResults = results || [];
   if (!isPreliminary) lastRawResults = currentResults;
+  renderMetaFieldChecks(currentResults);
 
   const resultsList = getResultsListEl();
   if (!resultsList) return;
@@ -311,6 +352,9 @@ export function renderResults(results, isPreliminary = false) {
     };
     c.addEventListener('click', (e) => {
       if (e.target.closest('button')) return;
+      // The detail table is for reading and selecting; a click or drag there must not insert
+      if (e.target.closest('.metadata-grid')) return;
+      if (String(window.getSelection() || '')) return;
       insert();
     });
     c.querySelector('.btn-item-insert')?.addEventListener('click', (e) => {

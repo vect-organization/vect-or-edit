@@ -29,6 +29,7 @@ export const STORAGE_KEYS = {
   OPENAI_API_KEY: 'openai_api_key',
   OPENAI_MODEL: 'openai_model',
   SHOW_FULL_METADATA: 'vect_show_full_metadata',
+  META_FIELDS: 'vect_meta_fields',
   APP_LANG: 'app_lang',
   EDITOR_BG_TONE: 'editor_bg_tone',
   CUSTOM_EDITOR_BG: 'editor_custom_bg',

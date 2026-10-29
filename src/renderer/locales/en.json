@@ -929,6 +929,7 @@
   "vis_sb_score_filter": "Minimum score field (sidebar)",
   "vis_sb_limit_select": "Result limit menu (sidebar)",
   "vis_sb_metadata_toggle": "Full metadata checkbox (sidebar)",
+  "vis_sb_metadata_fields": "Metadata field checkboxes (sidebar)",
   "vis_sb_quick_settings": "Sidebar settings gear",
   "vis_sys_bottom_bar": "Bottom bar",
   "vis_sys_status_bar": "Status info (characters, lines, encoding)",

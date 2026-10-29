@@ -1045,6 +1045,7 @@
   "vis_sb_score_filter": "最小スコアの入力欄（サイドバー）",
   "vis_sb_limit_select": "件数のメニュー（サイドバー）",
   "vis_sb_metadata_toggle": "全メタデータのチェック（サイドバー）",
+  "vis_sb_metadata_fields": "メタデータの項目別チェック（サイドバー）",
   "vis_sb_quick_settings": "サイドバーの設定ボタン（歯車）",
   "vis_sys_bottom_bar": "下部バー",
   "vis_sys_status_bar": "ステータス情報（文字数、行数、文字コード）",
